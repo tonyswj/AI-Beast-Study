@@ -1,0 +1,207 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (uid)
+    // Fields:
+    //   - uid: string (required)
+    //   - displayName: string (optional)
+    //   - photoURL: string (optional)
+    //   - totalXP: number (required)
+    //   - streak: number (required)
+    //   - lastStudyDate: string (optional)
+    //
+    // Collection: beasts
+    // Document ID: beastId
+    // Fields:
+    //   - id: string (required)
+    //   - subject: string (required, enum)
+    //   - level: number (required)
+    //   - xp: number (required)
+    //   - stage: number (required)
+    //   - mood: number (required)
+    //   - lastInteraction: string (optional)
+    //
+    // Collection: studySessions
+    // Document ID: sessionId
+    // Fields:
+    //   - id: string (required)
+    //   - subject: string (required)
+    //   - xpEarned: number (required)
+    //   - timestamp: string (required)
+    //   - accuracy: number (optional)
+    //   - duration: number (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "1529333046@qq.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'displayName', 'photoURL', 'totalXP', 'streak', 'lastStudyDate', 'role', 'settings']) &&
+        data.uid == request.auth.uid &&
+        data.totalXP is number && data.totalXP >= 0 &&
+        data.streak is number && data.streak >= 0 &&
+        (!('lastStudyDate' in data) || isValidDateString(data.lastStudyDate)) &&
+        (!('role' in data) || data.role in ['admin', 'user']) &&
+        (!('settings' in data) || data.settings is map);
+    }
+
+    function isValidBeast(data) {
+      return hasOnlyAllowedFields(['id', 'subject', 'level', 'xp', 'stage', 'mood', 'lastInteraction']) &&
+        data.id is string &&
+        data.subject in ['math', 'english', 'chinese', 'physics', 'chemistry', 'biology', 'politics', 'history', 'geography'] &&
+        data.level is number && data.level >= 1 &&
+        data.xp is number && data.xp >= 0 &&
+        data.stage is number && data.stage >= 1 &&
+        data.mood is number && data.mood >= 0 &&
+        (!('lastInteraction' in data) || isValidDateString(data.lastInteraction));
+    }
+
+    function isValidStudySession(data) {
+      return hasOnlyAllowedFields(['id', 'subject', 'xpEarned', 'timestamp', 'accuracy', 'duration']) &&
+        data.id is string &&
+        data.subject is string &&
+        data.xpEarned is number && data.xpEarned >= 0 &&
+        isValidDateString(data.timestamp) &&
+        (!('accuracy' in data) || (data.accuracy is number && data.accuracy >= 0 && data.accuracy <= 1)) &&
+        (!('duration' in data) || (data.duration is number && data.duration >= 0));
+    }
+
+    function isValidGoal(data) {
+      return hasOnlyAllowedFields(['id', 'userId', 'type', 'subject', 'targetValue', 'progress', 'deadline', 'completed', 'title']) &&
+        data.id is string &&
+        data.userId == request.auth.uid &&
+        data.type in ['daily', 'weekly'] &&
+        data.targetValue is number &&
+        data.progress is number &&
+        isValidDateString(data.deadline) &&
+        data.completed is bool &&
+        data.title is string;
+    }
+
+    function isValidReminder(data) {
+      return hasOnlyAllowedFields(['id', 'userId', 'time', 'repeat', 'enabled', 'type']) &&
+        data.id is string &&
+        data.userId == request.auth.uid &&
+        data.time is string &&
+        data.repeat is list &&
+        data.enabled is bool &&
+        data.type in ['fixed', 'ai', 'streak-protection'];
+    }
+
+    function isValidWrongQuestion(data) {
+      return hasOnlyAllowedFields(['id', 'text', 'options', 'correctAnswer', 'explanation', 'subject', 'addedAt']) &&
+        data.id is string &&
+        data.text is string &&
+        data.options is list &&
+        data.correctAnswer is number &&
+        (!('explanation' in data) || data.explanation is string) &&
+        data.subject is string &&
+        isValidDateString(data.addedAt);
+    }
+
+    function isValidAchievement(data) {
+      return hasOnlyAllowedFields(['id', 'unlockedAt', 'progress', 'completed']) &&
+        data.id is string &&
+        isValidDateString(data.unlockedAt) &&
+        (!('progress' in data) || data.progress is number) &&
+        data.completed is bool;
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && (!('role' in request.resource.data) || request.resource.data.role == 'user');
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+        (request.resource.data.role == resource.data.role || isAdmin());
+
+      match /achievements/{achievementId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidAchievement(request.resource.data);
+        allow update: if isOwner(userId) && isValidAchievement(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /beasts/{beastId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidBeast(request.resource.data);
+        allow update: if isOwner(userId) && isValidBeast(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /goals/{goalId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidGoal(request.resource.data);
+        allow update: if isOwner(userId) && isValidGoal(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /reminders/{reminderId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidReminder(request.resource.data);
+        allow update: if isOwner(userId) && isValidReminder(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /wrongQuestions/{questionId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidWrongQuestion(request.resource.data);
+        allow update: if isOwner(userId) && isValidWrongQuestion(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /studySessions/{sessionId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidStudySession(request.resource.data);
+        allow update: if isOwner(userId) && isValidStudySession(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    match /leaderboards/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

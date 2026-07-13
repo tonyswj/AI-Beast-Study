@@ -1,0 +1,88 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and global stats",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "totalXP": { "type": "integer" },
+        "streak": { "type": "integer" },
+        "lastStudyDate": { "type": "string", "format": "date-time" },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "theme": { "type": "string" },
+            "soundEnabled": { "type": "boolean" },
+            "vibrationEnabled": { "type": "boolean" },
+            "aiEnabled": { "type": "boolean" },
+            "notificationsEnabled": { "type": "boolean" },
+            "bgmVolume": { "type": "number" }
+          }
+        }
+      },
+      "required": ["uid", "totalXP", "streak"]
+    },
+    "Beast": {
+      "title": "Beast",
+      "description": "A study beast associated with a specific subject",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "subject": { "type": "string", "enum": ["math", "english", "chinese", "physics", "chemistry", "biology", "politics", "history", "geography"] },
+        "level": { "type": "integer" },
+        "xp": { "type": "integer" },
+        "stage": { "type": "integer" },
+        "mood": { "type": "integer" },
+        "lastInteraction": { "type": "string", "format": "date-time" }
+      },
+      "required": ["subject", "level", "xp", "stage"]
+    },
+    "StudySession": {
+      "title": "StudySession",
+      "description": "A record of a single study session",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "subject": { "type": "string" },
+        "xpEarned": { "type": "integer" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "accuracy": { "type": "number" },
+        "duration": { "type": "integer" }
+      },
+      "required": ["subject", "xpEarned", "timestamp"]
+    },
+    "Achievement": {
+      "title": "Achievement",
+      "description": "An achievement earned by a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "unlockedAt": { "type": "string", "format": "date-time" },
+        "progress": { "type": "number" },
+        "completed": { "type": "boolean" }
+      },
+      "required": ["id", "unlockedAt", "completed"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "/users/{userId}/beasts/{beastId}": {
+      "schema": "Beast",
+      "description": "Beasts owned by a user"
+    },
+    "/users/{userId}/studySessions/{sessionId}": {
+      "schema": "StudySession",
+      "description": "Study logs for a user"
+    },
+    "/users/{userId}/achievements/{achievementId}": {
+      "schema": "Achievement",
+      "description": "Achievements earned by a user"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "学灵 (StudyBeast)",
+  "description": "把学习变成养成游戏。通过学科挑战培养你的专属小兽，实现学习进化。",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
